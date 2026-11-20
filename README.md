@@ -7,6 +7,14 @@ coincidences **AB**, and, behind a toggle, a third detector **C** with **AC**,
 
 Packet format: [docs/protocol.md](docs/protocol.md).
 
+**Live page:** https://openphysics.github.io/de2AlteraOptics/. Pick a data source:
+
+| Source | Needs | Browsers |
+|---|---|---|
+| **Local bridge** | `npm run bridge` on the lab PC (reads `/dev/ttyUSB0`); the hosted page connects to `http://localhost:8787` | Chrome, Edge, Firefox (Chrome may ask to allow local-network access) |
+| **USB serial (Web Serial)** | nothing installed, but the USB-serial adapter must have a working OS driver (FTDI, CH340, CP210x; **not** PL2303TA on Windows 11) | Chrome, Edge |
+| **Simulator** | nothing: simulated heralded single-photon source | any |
+
 ## How it works
 
 ```
@@ -58,6 +66,17 @@ Options (flags for `node server/bridge.ts`, or env vars for `npm run dev`):
 - Strip charts, **Record** → **Download CSV** (mapped and raw counters).
 - **Raw counters & channel mapping**: live values of all 8 counters and an
   editable counter → channel map (saved in the browser).
+
+## CI / deploy
+
+- `.github/workflows/ci.yml`: lint, typecheck, tests, build, plus a simulator
+  smoke test of the bridge (stream, CORS allow/deny), on every push and PR.
+- `.github/workflows/deploy.yml`: builds and publishes `dist/` to GitHub Pages
+  on every push to `main`.
+
+The bridge only accepts cross-origin requests from `https://openphysics.github.io`
+and localhost; add more with `DE2_ALLOW_ORIGIN="https://a.example,…"`. It binds to
+`localhost` only.
 
 ## Checks
 

@@ -20,6 +20,15 @@ import {
   heraldedG2,
   rate,
 } from '../de2/stats.ts';
+import {
+  BridgeSource,
+  type PacketMsg,
+  SimulatorSource,
+  type Source,
+  type StatusMsg,
+  WebSerialSource,
+  webSerialSupported,
+} from '../de2/sources.ts';
 import { type Series, StripChart, formatNumber } from './chart.ts';
 
 // --- settings (persisted per browser) ---------------------------------------
@@ -452,31 +461,12 @@ function onBlock(block: Block): void {
   }
 }
 
-interface PacketMsg {
-  t: number;
-  c: number[];
-  hex: string;
-}
-
-interface StatusMsg {
-  source: string;
-  device: string;
-  baud: number;
-  open: boolean;
-  receiving: boolean;
-  packets: number;
-  dropped: number;
-  error: string | null;
-}
-
 function setStatus(kind: 'ok' | 'warn' | 'err', text: string): void {
   status.className = `pill ${kind}`;
   status.textContent = text;
 }
 
-const es = new EventSource('/stream');
-es.addEventListener('packet', (ev) => {
-  const p = JSON.parse((ev as MessageEvent<string>).data) as PacketMsg;
+function onPacket(p: PacketMsg): void {
   p.c.forEach((v, i) => {
     const cell = rawCells[i];
     if (cell) cell.value.textContent = v.toLocaleString();
@@ -486,9 +476,15 @@ es.addEventListener('packet', (ev) => {
   const block = integrator.add(p.c, p.t);
   progress.style.width = `${(block ? 1 : integrator.progress) * 100}%`;
   if (block) onBlock(block);
-});
-es.addEventListener('status', (ev) => {
-  const s = JSON.parse((ev as MessageEvent<string>).data) as StatusMsg;
+}
+
+const SOURCE_NAMES: Record<string, string> = {
+  serial: 'bridge',
+  simulator: 'simulator',
+  webserial: 'Web Serial',
+};
+
+function onStatus(s: StatusMsg): void {
   const where = `${s.device} @ ${s.baud}`;
   const sim = s.source === 'simulator' ? ' (SIMULATED)' : '';
   if (s.error) setStatus('err', s.error);
@@ -498,9 +494,112 @@ es.addEventListener('status', (ev) => {
   else
     setStatus(
       s.source === 'simulator' ? 'warn' : 'ok',
-      `Receiving · ${where}${sim} · ${s.packets} packets${s.dropped ? `, ${s.dropped} bad` : ''}`
+      `Receiving via ${SOURCE_NAMES[s.source] ?? s.source} · ${where}${sim} · ${s.packets} packets${s.dropped ? `, ${s.dropped} bad` : ''}`
     );
-});
-es.addEventListener('error', () =>
-  setStatus('err', 'Bridge offline — is `npm run dev` running?')
+}
+
+// --- data source selection ------------------------------------------------------
+
+const isLocalHost = ['localhost', '127.0.0.1', '[::1]'].includes(
+  location.hostname
 );
+/** Served by the bridge or Vite → same origin; hosted (Pages) → localhost. */
+const DEFAULT_BRIDGE_URL = isLocalHost ? '' : 'http://localhost:8787';
+
+let sourceKind = loadPref('source', 'bridge') as 'bridge' | 'webserial' | 'sim';
+let bridgeUrl = loadPref('bridgeUrl', DEFAULT_BRIDGE_URL);
+let current: Source | null = null;
+
+function loadPref(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(`de2-optics.${key}`) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function savePref(key: string, value: string): void {
+  try {
+    localStorage.setItem(`de2-optics.${key}`, value);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+const sourceSelect = $<HTMLSelectElement>('source');
+const bridgeInput = $<HTMLInputElement>('bridge-url');
+const bridgeLabel = $('bridge-url-label');
+const connectBtn = $<HTMLButtonElement>('connect');
+
+if (!webSerialSupported()) {
+  const opt = sourceSelect.querySelector<HTMLOptionElement>(
+    'option[value="webserial"]'
+  );
+  if (opt) {
+    opt.disabled = true;
+    opt.textContent += ' — Chrome/Edge only';
+  }
+  if (sourceKind === 'webserial') sourceKind = 'bridge';
+}
+sourceSelect.value = sourceKind;
+bridgeInput.value = bridgeUrl;
+
+function syncSourceUi(): void {
+  bridgeLabel.hidden = sourceKind !== 'bridge';
+  connectBtn.textContent = current ? 'Disconnect' : 'Connect';
+}
+
+async function connect(): Promise<void> {
+  await disconnect();
+  integrator.reset();
+  singlesChart.clear();
+  coincChart.clear();
+  const src: Source =
+    sourceKind === 'webserial'
+      ? new WebSerialSource()
+      : sourceKind === 'sim'
+        ? new SimulatorSource()
+        : new BridgeSource(bridgeUrl);
+  current = src;
+  syncSourceUi();
+  setStatus('warn', 'Connecting…');
+  await src.start({
+    packet: onPacket,
+    status: onStatus,
+    fail: (msg) => {
+      setStatus('err', msg);
+      // a failed Web Serial open leaves nothing running
+      if (sourceKind === 'webserial' && current === src) {
+        current = null;
+        syncSourceUi();
+      }
+    },
+  });
+}
+
+async function disconnect(): Promise<void> {
+  const src = current;
+  current = null;
+  await src?.stop();
+  syncSourceUi();
+  setStatus('warn', 'Not connected');
+}
+
+sourceSelect.addEventListener('change', () => {
+  sourceKind = sourceSelect.value as typeof sourceKind;
+  savePref('source', sourceKind);
+  void disconnect();
+});
+bridgeInput.addEventListener('change', () => {
+  bridgeUrl = bridgeInput.value.trim();
+  savePref('bridgeUrl', bridgeUrl);
+  if (current && sourceKind === 'bridge') void connect();
+});
+connectBtn.addEventListener('click', () => {
+  void (current ? disconnect() : connect());
+});
+
+syncSourceUi();
+// Web Serial needs a click to open the port picker; the others can start now.
+if (sourceKind !== 'webserial') void connect();
+else setStatus('warn', 'Click Connect and choose the USB-serial adapter');

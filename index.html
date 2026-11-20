@@ -12,8 +12,23 @@
         <h1>DE2 Coincidence Counter</h1>
         <p class="sub">Singles and coincidences from the FPGA, 100 ms gates</p>
       </div>
-      <div id="status" class="pill" role="status" aria-live="polite">
-        Connecting…
+      <div class="source">
+        <label>
+          Data source
+          <select id="source">
+            <option value="bridge">Local bridge</option>
+            <option value="webserial">USB serial (Web Serial)</option>
+            <option value="sim">Simulator (demo)</option>
+          </select>
+        </label>
+        <label id="bridge-url-label">
+          Bridge URL
+          <input id="bridge-url" type="url" placeholder="same origin" />
+        </label>
+        <button id="connect" type="button">Connect</button>
+        <div id="status" class="pill" role="status" aria-live="polite">
+          Not connected
+        </div>
       </div>
     </header>
 

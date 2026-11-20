@@ -18,6 +18,8 @@ function de2Bridge(): Plugin {
 }
 
 export default defineConfig({
+  // relative asset paths so the build works under /de2AlteraOptics/ on Pages
+  base: './',
   plugins: [de2Bridge()],
   server: { port: 5173, host: 'localhost' },
 });
