@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DE2 Coincidence Counter</title>
+    <link rel="stylesheet" href="/src/ui/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>DE2 Coincidence Counter</h1>
+        <p class="sub">Singles and coincidences from the FPGA, 100 ms gates</p>
+      </div>
+      <div id="status" class="pill" role="status" aria-live="polite">
+        Connecting…
+      </div>
+    </header>
+
+    <section class="controls" aria-label="Acquisition settings">
+      <label>
+        Integration time
+        <select id="integration">
+          <option value="1">0.1 s</option>
+          <option value="5">0.5 s</option>
+          <option value="10">1 s</option>
+          <option value="20">2 s</option>
+          <option value="50">5 s</option>
+          <option value="100">10 s</option>
+          <option value="300">30 s</option>
+          <option value="600">60 s</option>
+        </select>
+      </label>
+      <label>
+        Coincidence window Δt (ns)
+        <input id="window" type="number" min="0" step="0.1" />
+      </label>
+      <button id="calibrate" type="button"
+        title="Set Δt = R_AB / (R_A·R_B) from the last window. Only valid when there are no true pairs (e.g. a long delay inserted).">
+        Calibrate Δt
+      </button>
+      <label class="switch">
+        <input id="three" type="checkbox" />
+        <span>Third detector (C, AC, BC)</span>
+      </label>
+      <div class="spacer"></div>
+      <button id="pause" type="button">Pause</button>
+      <button id="record" type="button">Record</button>
+      <button id="download" type="button" disabled>Download CSV</button>
+    </section>
+
+    <div class="progress" aria-hidden="true"><div id="progress"></div></div>
+
+    <main>
+      <h2>Singles</h2>
+      <div id="singles" class="cards"></div>
+      <h2>Coincidences</h2>
+      <div id="coinc" class="cards"></div>
+
+      <div class="charts">
+        <figure>
+          <figcaption>Singles rate (counts/s)</figcaption>
+          <canvas id="chart-singles"></canvas>
+          <div class="legend" id="legend-singles"></div>
+        </figure>
+        <figure>
+          <figcaption>Coincidence rate (counts/s); dashed = accidentals</figcaption>
+          <canvas id="chart-coinc"></canvas>
+          <div class="legend" id="legend-coinc"></div>
+        </figure>
+      </div>
+      <div class="row">
+        <button id="clear" type="button">Clear chart</button>
+        <span id="rec-info" class="muted"></span>
+      </div>
+
+      <details class="raw">
+        <summary>Raw counters &amp; channel mapping</summary>
+        <p class="muted">
+          The board sends 8 counters per packet. Block one detector at a time
+          to check which counter belongs to which channel, then change the
+          mapping here (saved in this browser).
+        </p>
+        <table>
+          <thead>
+            <tr><th>Counter</th><th>Last packet</th><th>Rate (/s)</th><th>Channel</th></tr>
+          </thead>
+          <tbody id="raw-rows"></tbody>
+        </table>
+        <button id="reset-map" type="button">Reset mapping</button>
+        <p class="muted">Last packet (hex):</p>
+        <pre id="hex"></pre>
+      </details>
+    </main>
+    <script type="module" src="/src/ui/main.ts"></script>
+  </body>
+</html>
